@@ -117,26 +117,28 @@ void KUKA_INVDYN::joint_states_cb( sensor_msgs::JointState js ) {
 void KUKA_INVDYN::ctrl_loop() {
 
 	std_msgs::Float64 cmd[7];
-  KDL::JntArray coriol_(7);
-  KDL::JntArray grav_(7);
-	
+	KDL::JntArray coriol_(7);
+	KDL::JntArray grav_(7);
 
-  KDL::JntSpaceInertiaMatrix jsim_;
-  jsim_.resize(_k_chain.getNrOfJoints());
+
+	KDL::JntSpaceInertiaMatrix jsim_;
+	jsim_.resize(_k_chain.getNrOfJoints());
 	while( !_first_js ) usleep(0.1);
 		
+
+	cout << "First js!!" << endl;
 	ros::Rate r(250);
-	double Kp = 50;
-	double Kd = 10;
+	double Kp = 150;
+	double Kd = 110;
 
 	while( ros::ok() ) {		
 
-    Eigen::VectorXd e = _initial_q->data - _q_in->data; //Keep initial position
+		Eigen::VectorXd e = _initial_q->data - _q_in->data; //Keep initial position
 
-    Eigen::VectorXd de = -_dq_in->data; //Desired velocity: 0
+		Eigen::VectorXd de = -_dq_in->data; //Desired velocity: 0
 		_dyn_param->JntToMass(*_q_in, jsim_);
 		_dyn_param->JntToCoriolis(*_q_in, *_dq_in, coriol_);
-    _dyn_param->JntToGravity(*_q_in, grav_);
+		_dyn_param->JntToGravity(*_q_in, grav_);
 
 
 		Eigen::VectorXd q_out = jsim_.data * (Kd*de + Kp*e ) + coriol_.data + grav_.data;
@@ -147,11 +149,8 @@ void KUKA_INVDYN::ctrl_loop() {
 		for(int i=0; i<7; i++ ) {
 			_cmd_pub[i].publish( cmd[i] );
 		}
-	
-	
-
-
-
+		
+		
 		r.sleep();
 	}
 

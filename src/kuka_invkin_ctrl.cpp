@@ -155,8 +155,8 @@ void KUKA_INVKIN::goto_initial_position( float dp[7] ) {
 	
 	ros::Rate r(10);
 
-	float min_e = 1000;
-	float max_e;
+	float min_e = 1000.0;
+	float max_e = 1000.0;
 
 	std_msgs::Float64 cmd[7];
 
@@ -169,7 +169,7 @@ void KUKA_INVKIN::goto_initial_position( float dp[7] ) {
 			_cmd_pub[i].publish (cmd[i]);
 			float e = fabs( cmd[i].data - _q_in->data[i] );
 			//max_e is the maximum error over all the joints
-			max_e = ( e > max_e ) ? e : max_e;	 
+			max_e = ( e > max_e ) ? e : max_e;
 		}
 		r.sleep();
 	}
@@ -227,7 +227,6 @@ void KUKA_INVKIN::get_dirkin() {
 
 
 void KUKA_INVKIN::ctrl_loop() {
-
 	
 	//Wait until the first fk has not been calculated
 	while( !_first_fk ) usleep(0.1);
@@ -237,8 +236,8 @@ void KUKA_INVKIN::ctrl_loop() {
 	float i_cmd[7];
 	i_cmd[0] = 0.0;
 	i_cmd[1] = i_cmd[2] = i_cmd[4] = i_cmd[6] = 0.0;
-	i_cmd[3] = 1.57;
-	i_cmd[5] = -1.57;
+	i_cmd[3] = -1.57;
+	i_cmd[5] = 1.57;
 	goto_initial_position( i_cmd );
 
 	//F_dest is the target frame: where we want to bring the robot end effector 
@@ -250,7 +249,7 @@ void KUKA_INVKIN::ctrl_loop() {
 	//Generate the goal position
 	//	Starting from the current position (_p_out) 
 	//		command the data with an offset
-	F_dest.p.data[0] = _p_out.p.x() - 0.2;
+	F_dest.p.data[0] = _p_out.p.x() + 0.2;
 	F_dest.p.data[1] = _p_out.p.y();
 	F_dest.p.data[2] = _p_out.p.z() - 0.1;
 
@@ -258,6 +257,10 @@ void KUKA_INVKIN::ctrl_loop() {
 	for(int i=0; i<9; i++ )
 		F_dest.M.data[i] = _p_out.M.data[i];
 
+	//Lock the code to start manually the execution of the trajectory
+	cout << "Press enter to start the trajectory execution" << endl;
+	string ln;
+	getline(cin, ln);
 	
 	std_msgs::Float64 cmd[7];
 
