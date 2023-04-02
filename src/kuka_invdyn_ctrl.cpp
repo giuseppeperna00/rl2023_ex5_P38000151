@@ -4,11 +4,12 @@
 #include "geometry_msgs/Pose.h"
 #include <std_msgs/Float64.h>
 
+//Include KDL libraries
 #include <kdl_parser/kdl_parser.hpp>
-#include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolverpos_nr.hpp>
+//Get dynamic parameters
 #include <kdl/chaindynparam.hpp>
 
 using namespace std;
@@ -17,10 +18,14 @@ using namespace std;
 class KUKA_INVDYN {
 	public:
 		KUKA_INVDYN();
-		void run();
-		bool init_robot_model();
 
+		//From the run method we will start all the threads needed to accomplish the task
+		void run();
+		//Function to load the model from the URDF file (parameter server)
+		bool init_robot_model();
+		//Callback for the /joint_state message to retrieve the value of the joints
 		void joint_states_cb( sensor_msgs::JointState );
+		//Main control loop function
 		void ctrl_loop();
 
 
