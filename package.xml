@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>iiwa_kdl</name>
+  <name>rl2023_ex5</name>
   <version>0.0.0</version>
-  <description>The iiwa_kdl package</description>
+  <description>The rl2023_ex5 package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

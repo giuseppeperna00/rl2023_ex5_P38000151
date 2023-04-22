@@ -1,4 +1,5 @@
 #include "ros/ros.h"
+#include "ros/package.h"
 #include "boost/thread.hpp"
 #include "geometry_msgs/Pose.h"
 #include "sensor_msgs/JointState.h"
@@ -9,6 +10,7 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 #include <kdl/chainiksolverpos_nr.hpp>
+#include <fstream>
 
 using namespace std;
 
@@ -29,7 +31,8 @@ class KUKA_INVKIN {
 		void goto_initial_position( float dp[7] );
 		//Main control loop function
 		void ctrl_loop();
-		
+		void read_trajectory(KDL::Frame &F_dest, ifstream &forward_traj, ifstream &backward_traj);
+
 	private:
 		ros::NodeHandle _nh;
 
@@ -40,14 +43,8 @@ class KUKA_INVKIN {
 	
 		//Forward kinematics solver
 		KDL::ChainFkSolverPos_recursive *_fksolver; 	
-		//Implementation of a inverse velocity kinematics algorithm based on 
-		//the generalize pseudo inverse to calculate the velocity transformation 
-		//from Cartesian to joint space of a general KDL::Chain
 		KDL::ChainIkSolverVel_pinv *_ik_solver_vel;   	//Inverse velocity solver
 		
-		//Implementation of a general inverse position kinematics algorithm based on Newton-Raphson 
-		//iterations to calculate the position transformation from Cartesian 
-		//to joint space of a general KDL::Chain. 
 		KDL::ChainIkSolverPos_NR *_ik_solver_pos;
 
 		ros::Subscriber _js_sub;
@@ -63,8 +60,11 @@ class KUKA_INVKIN {
 		//that data have been received
 		bool _first_js;
 		bool _first_fk;
-	
 
+		bool _first_point_reached;
+		bool _second_point_reached;
+		int _length;
+		int _pos;
 };
 
 KUKA_INVKIN::KUKA_INVKIN() {
@@ -94,6 +94,11 @@ KUKA_INVKIN::KUKA_INVKIN() {
 	//Set the control flags to false
 	_first_js = false;
 	_first_fk = false;
+
+	_first_point_reached = true;
+	_second_point_reached = false;
+	_length = 0;
+	_pos = 0;
 }
 
 
@@ -116,18 +121,12 @@ bool KUKA_INVKIN::init_robot_model() {
 	if ( !iiwa_tree.getChain(base_link, tip_link, _k_chain) ) return false;
 
 	//Initialize the solvers
-	//Solvers are declared as pointer in the class definition
-	//Here we instantiate the solvers on the desired kinematic chain
 	_fksolver = new KDL::ChainFkSolverPos_recursive( _k_chain );
 	_ik_solver_vel = new KDL::ChainIkSolverVel_pinv( _k_chain );
-	//The invers kinematic solver object needs must be initialized considering also
-	//the number of iterations to solve the ik problem on a given robot configuration
-	//and the allowed error on the joint positioning 
 	_ik_solver_pos = new KDL::ChainIkSolverPos_NR( _k_chain, *_fksolver, *_ik_solver_vel, 100, 1e-6 );
 
-	//The _q_in is the vetor where the values of the joints at a current time
-	//are saved. Also this variable is a pointer
-	//Must be instantiated before its usage 
+	//The _q_in is the vector where the values of the joints at a current time
+	//are saved.
 	_q_in = new KDL::JntArray( _k_chain.getNrOfJoints() );
 
 
@@ -148,9 +147,7 @@ void KUKA_INVKIN::joint_states_cb( sensor_msgs::JointState js ) {
 }
 
 //Initial robot positioning
-//Command the initial velue until that value has not been reached
-//	If the robot is controlled in position, the inner loop of the acutator 
-//	will assure that the value will be reached in a smooth way
+
 void KUKA_INVKIN::goto_initial_position( float dp[7] ) {
 	
 	ros::Rate r(10);
@@ -185,18 +182,13 @@ void KUKA_INVKIN::get_dirkin() {
 	KDL::JntArray q_curr(_k_chain.getNrOfJoints());
 
 	//Wait the first Joint state message
-	//	Without the first joint value
-	//	is not useful to calculate the Fk
-	while( !_first_js ) usleep(0.1);
+	while( !_first_js ) usleep(0.1*1e6);
 
 	//Output message to publish the pose of the end effector
 	geometry_msgs::Pose cpose;
 
 	while(ros::ok()) {
 
-		//JntToCart: Joint values to Cartesian space
-		//	First argument: the current value of the robot joints
-		//	Second argument: the calculated pose of the end effector
 		_fksolver->JntToCart(*_q_in, _p_out);
 
 
@@ -206,9 +198,6 @@ void KUKA_INVKIN::get_dirkin() {
 		cpose.position.y = _p_out.p.y();
 		cpose.position.z = _p_out.p.z();
 
-		//In KDL the p_out is a KDL::Frame data
-		//	The orientation is reported in the rotation matrix form
-		//	We can convert into quaternion
 		_p_out.M.GetQuaternion( qx, qy, qz, qw);
 		cpose.orientation.w = qw;
 		cpose.orientation.x = qx;
@@ -224,13 +213,44 @@ void KUKA_INVKIN::get_dirkin() {
 	}
 }
 
+void KUKA_INVKIN::read_trajectory(KDL::Frame &F_dest, ifstream &forward_traj, ifstream &backward_traj) {
+	//forward trajectory
+	if(!_second_point_reached) {
+		if(!forward_traj.eof()) {
+		forward_traj >> F_dest.p.data[0];
+		forward_traj >> F_dest.p.data[1];
+		forward_traj >> F_dest.p.data[2];
+		}
+		else {
+			_second_point_reached = true;
+			_first_point_reached = false;
+			forward_traj.clear();
+			forward_traj.seekg(0);
+		}
+	}
+
+	//backward trajectory
+	if(!_first_point_reached) {
+		if(!backward_traj.eof()) {
+			backward_traj >> F_dest.p.data[0];
+			backward_traj >> F_dest.p.data[1];
+			backward_traj >> F_dest.p.data[2];
+		}
+		else {
+			_second_point_reached = false;
+			_first_point_reached = true;
+			backward_traj.clear();
+			backward_traj.seekg(0);
+		}
+	}
+	
+}
 
 
 void KUKA_INVKIN::ctrl_loop() {
 	
 	//Wait until the first fk has not been calculated
 	while( !_first_fk ) usleep(0.1);
-
 
 	//Control the robot towards a fixed initial position
 	float i_cmd[7];
@@ -243,39 +263,62 @@ void KUKA_INVKIN::ctrl_loop() {
 	//F_dest is the target frame: where we want to bring the robot end effector 
 	KDL::Frame F_dest;
 
-	//q_out is the variable storing the output of the Inverse kinematic
-	KDL::JntArray q_out(_k_chain.getNrOfJoints());
+	//Get path of files containing forward and backward trajectory
+	string path = ros::package::getPath("iiwa_kdl");
+	string path1 = path + "/forward_trajectory.txt";
+	string path2 = path + "/backward_trajectory.txt";
 
-	//Generate the goal position
-	//	Starting from the current position (_p_out) 
-	//		command the data with an offset
-	F_dest.p.data[0] = _p_out.p.x() + 0.2;
-	F_dest.p.data[1] = _p_out.p.y();
-	F_dest.p.data[2] = _p_out.p.z() - 0.1;
+	ifstream forward_traj;
+	ifstream backward_traj;
+
+	//Initialize input files
+	forward_traj.open(path1, ios::in);
+	if(!forward_traj.is_open()) {
+		ROS_ERROR("Forward trajectory file does not exist");
+		exit(1);
+	}
+
+	backward_traj.open(path2, ios::in);
+	if(!backward_traj.is_open()) {
+		ROS_ERROR("Backward trajectory file does not exist");
+		exit(1);
+	}
+
 
 	//The orientation set point is the same of the current one
 	for(int i=0; i<9; i++ )
 		F_dest.M.data[i] = _p_out.M.data[i];
 
+	//q_out is the variable storing the output of the Inverse kinematic
+	KDL::JntArray q_out(_k_chain.getNrOfJoints());
+
+
+	ros::Rate r(1000);
+
 	//Lock the code to start manually the execution of the trajectory
 	cout << "Press enter to start the trajectory execution" << endl;
 	string ln;
 	getline(cin, ln);
-	
+
 	std_msgs::Float64 cmd[7];
 
-	//CartToJnt: transform the desired cartesian position into joint values
-	if( _ik_solver_pos->CartToJnt(*_q_in, F_dest, q_out) != KDL::SolverI::E_NOERROR ) 
-		cout << "failing in ik!" << endl;
+	while(ros::ok()) {
+		read_trajectory(F_dest, forward_traj, backward_traj);
 
-	//Convert KDL output values into std_msgs::Float datatype
-	for(int i=0; i<7; i++) {
-		cmd[i].data = q_out.data[i];
-	}
+		//CartToJnt: transform the desired cartesian position into joint values
+		if( _ik_solver_pos->CartToJnt(*_q_in, F_dest, q_out) != KDL::SolverI::E_NOERROR ) 
+			cout << "failing in ik!" << endl;
 
-	//Publish all the commands in topics
-	for(int i=0; i<7; i++) {
-		_cmd_pub[i].publish (cmd[i]);
+		//Convert KDL output values into std_msgs::Float datatype
+		for(int i=0; i<7; i++) {
+			cmd[i].data = q_out.data[i];
+		}
+
+		//Publish all the commands in topics
+		for(int i=0; i<7; i++) {
+			_cmd_pub[i].publish (cmd[i]);
+		}
+		r.sleep();
 	}
 }
 

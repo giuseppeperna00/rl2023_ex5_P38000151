@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(iiwa_kdl)
+project(rl2023_ex5)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -121,9 +121,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable( kuka_invkin_ctrl src/kuka_invkin_ctrl.cpp)
-target_link_libraries ( kuka_invkin_ctrl ${catkin_LIBRARIES}  )
+add_executable( kuka_invkin_ctrl_ex5 src/kuka_invkin_ctrl.cpp)
+target_link_libraries ( kuka_invkin_ctrl_ex5 ${catkin_LIBRARIES}  )
 
-add_executable( kuka_invdyn_ctrl src/kuka_invdyn_ctrl.cpp)
-target_link_libraries ( kuka_invdyn_ctrl ${catkin_LIBRARIES}  )
 
