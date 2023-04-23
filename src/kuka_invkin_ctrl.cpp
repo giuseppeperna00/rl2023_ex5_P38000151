@@ -32,6 +32,7 @@ class KUKA_INVKIN {
 		//Main control loop function
 		void ctrl_loop();
 		void read_trajectory(KDL::Frame &F_dest, ifstream &forward_traj, ifstream &backward_traj);
+		void write_to_file(const ofstream &file);
 
 	private:
 		ros::NodeHandle _nh;
@@ -63,8 +64,6 @@ class KUKA_INVKIN {
 
 		bool _first_point_reached;
 		bool _second_point_reached;
-		int _length;
-		int _pos;
 };
 
 KUKA_INVKIN::KUKA_INVKIN() {
@@ -97,8 +96,6 @@ KUKA_INVKIN::KUKA_INVKIN() {
 
 	_first_point_reached = true;
 	_second_point_reached = false;
-	_length = 0;
-	_pos = 0;
 }
 
 
@@ -264,12 +261,13 @@ void KUKA_INVKIN::ctrl_loop() {
 	KDL::Frame F_dest;
 
 	//Get path of files containing forward and backward trajectory
-	string path = ros::package::getPath("iiwa_kdl");
+	string path = ros::package::getPath("rl2023_ex5");
 	string path1 = path + "/forward_trajectory.txt";
 	string path2 = path + "/backward_trajectory.txt";
 
 	ifstream forward_traj;
 	ifstream backward_traj;
+	ofstream q_out_file;
 
 	//Initialize input files
 	forward_traj.open(path1, ios::in);
@@ -282,6 +280,12 @@ void KUKA_INVKIN::ctrl_loop() {
 	if(!backward_traj.is_open()) {
 		ROS_ERROR("Backward trajectory file does not exist");
 		exit(1);
+	}
+
+	//Open output file
+	q_out_file.open(path + "/q_out.txt", ios::out);
+	if(!q_out_file.is_open()) {
+		ROS_ERROR("Could not open output file. Joint commands will not be logged.");
 	}
 
 
@@ -312,6 +316,8 @@ void KUKA_INVKIN::ctrl_loop() {
 		//Convert KDL output values into std_msgs::Float datatype
 		for(int i=0; i<7; i++) {
 			cmd[i].data = q_out.data[i];
+			if(i<6) q_out_file << q_out.data[i] <<'\t';
+			else q_out_file << q_out.data[i] << '\n';
 		}
 
 		//Publish all the commands in topics
