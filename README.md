@@ -13,3 +13,8 @@ $ rosrun rl2023_ex5 kuka_invkin_ctrl_ex5
 
 The program reads the forward and backward trajectory from the two text files provided and moves back and forth periodically (T = 8s) between two given points.
 Joint commands are logged in the file q_out.txt.
+
+# Trajectory and joint commands plots
+
+
+![plot_traj](https://user-images.githubusercontent.com/127132537/233839095-4427170a-44b1-40e1-b2ac-e179cf2dfb64.jpg)
